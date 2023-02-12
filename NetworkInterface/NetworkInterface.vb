@@ -141,11 +141,11 @@ Public Class NetworkConnection
                                                                  Dim bytesReceived As Integer
                                                                  Dim totalBytesReceived As Integer
 
-                                                                 'Each loop has a timeout of 50ms
+                                                                 'Buffer has a timeout of 200ms - if buffer remains blank after 200ms assume transmission is finished.
                                                                  Do
                                                                      Dim cts As New CancellationTokenSource
                                                                      Dim tcs As New TaskCompletionSource(Of Integer)
-                                                                     cts.CancelAfter(50)
+                                                                     cts.CancelAfter(200)
                                                                      cts.Token.Register(Sub() tcs.SetResult(0))
 
                                                                      Dim receive As Task(Of Integer)
