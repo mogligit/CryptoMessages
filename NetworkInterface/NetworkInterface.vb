@@ -59,6 +59,16 @@ Public Class NetworkConnection
         Return True
     End Function
 
+    Public Function TryDisconnect() As Boolean
+        Try
+            _socket.Close()
+        Catch ex As Exception
+            Return False
+        End Try
+
+        Return True
+    End Function
+
     Public Async Function ConnectAsync(ByVal ct As CancellationToken) As Task
         Dim socket As New Socket(SocketType.Stream, ProtocolType.Tcp)
 
