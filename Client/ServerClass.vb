@@ -10,17 +10,16 @@ Imports System.Net.Sockets
 
 'handles all connections to the server
 Public Class ServerConnection
-    Private connected As Boolean
+    Private connected As Boolean = False    'default is false
     Private IP As String
-    Private PORT As Integer
+    Private PORT As Integer = 13000     'default port is 13000
     Private NetInt As NetworkConnection
 
-    Sub New(ByVal IP As String, ByVal PORT As Integer)
+    Sub New(ByVal IP As String)
         Me.IP = IP
-        Me.PORT = PORT
         'initialise NetInt
         NetInt = New NetworkConnection(IPAddress.Parse(IP).MapToIPv4, PORT)
-        connected = False
+        connected = ConnectAsync().Result
     End Sub
     Public ReadOnly Property IsConnected As Boolean
         Get
@@ -32,8 +31,34 @@ Public Class ServerConnection
             Return IP
         End Get
     End Property
+    Public Async Function ConnectAsync() As Task(Of Boolean)
+        Dim nPing As New Ping
+        Dim nRandom As Integer = nPing.Random
+        Dim response As Packet
+        Dim pingResult As Ping
 
-    Public Async Function TryConnect() As Task(Of Result)
+        response = Await RequestAndResponse(nPing)
+        If Not IsNothing(response) Then
+            If response.GetType() = GetType(Ping) Then
+                pingResult = response
+                If pingResult.Random = nRandom Then
+                    connected = True
+                    Return True
+                Else
+                    'if the data in the ping is not the same
+                    Throw New UnknownTypeException
+                End If
+            Else
+                Throw New UnknownTypeException
+            End If
+        Else
+            Throw New NullResponseException
+        End If
+    End Function
+    Public Function Disconnect() As Boolean
+        Return NetInt.TryDisconnect()
+    End Function
+    Private Async Function TryConnect() As Task(Of Result)
         Dim nPing As New Ping
         Dim nRandom As Integer = nPing.Random
         Dim response As Packet
@@ -62,7 +87,13 @@ Public Class ServerConnection
         End Try
     End Function
 
+
     Public Async Function FetchServerPublicKey() As Task(Of ElgamalPublicKey)
+        If Not IsConnected() Then
+            Throw New ServerNotConnectedException()
+        End If
+
+
         Dim pubKeyRequest As New PublicKeyRequest
         Dim response As Packet
 
@@ -78,6 +109,10 @@ Public Class ServerConnection
         End If
     End Function
     Public Async Function AttemptLogin(ByVal LoginRequest As LoginAttempt) As Task(Of Result)
+        If Not IsConnected() Then
+            Throw New ServerNotConnectedException()
+        End If
+
         'fetching a one-time public key from server
         Dim serverPubKey As ElgamalPublicKey = Await FetchServerPublicKey()
 
@@ -110,6 +145,11 @@ Public Class ServerConnection
         End If
     End Function
     Public Async Function AttemptRegister(ByVal RegisterRequest As RegisterAttempt) As Task(Of Result)
+        If Not IsConnected() Then
+            Throw New ServerNotConnectedException()
+        End If
+
+
         Dim response As Packet
         Dim result As Result
         Dim serverPubKey As ElgamalPublicKey = Await FetchServerPublicKey()
@@ -129,6 +169,10 @@ Public Class ServerConnection
         End If
     End Function
     Public Async Function FetchUserData(ByVal Username As String, ByVal LocalPublicKey As ElgamalPublicKey) As Task(Of ElgamalCiphertext)
+        If Not IsConnected() Then
+            Throw New ServerNotConnectedException()
+        End If
+
         Dim request As New UserDataRequest(Username, LocalPublicKey)
         Dim response As Packet
         Dim ciphertext As ElgamalCiphertext
@@ -147,6 +191,10 @@ Public Class ServerConnection
         End If
     End Function
     Public Async Function ChangeOnlineStatus(ByVal Notification As UserStatusNotification) As Task(Of Result)
+        If Not IsConnected() Then
+            Throw New ServerNotConnectedException()
+        End If
+
         Dim response As Packet
         Dim result As Result
 
@@ -166,6 +214,10 @@ Public Class ServerConnection
         End If
     End Function
     Public Async Function UploadUserData(ByVal data As UserData) As Task(Of Result)
+        If Not IsConnected() Then
+            Throw New ServerNotConnectedException()
+        End If
+
         Try
             Dim serverKey As ElgamalPublicKey = Await FetchServerPublicKey()
 
@@ -192,6 +244,10 @@ Public Class ServerConnection
     End Function
 
     Private Async Function RequestAndResponse(ByVal request As Packet, Optional Timeout As Integer = 2000) As Task(Of Packet)
+        If Not IsConnected() Then
+            Throw New ServerNotConnectedException()
+        End If
+
         Dim CT As New CancellationTokenSource
 
         'if timeout is 0, wait indifinitely
@@ -199,12 +255,11 @@ Public Class ServerConnection
             CT.CancelAfter(Timeout)    'set timeout for cancellationtoken
         End If
 
-        Dim listeningTask As Task(Of Packet) = NetInt.ListenAsync(CT.Token)    'start to listen
-
         request.IsForServer = True
-        Dim newTask As Task = NetInt.Send(request, CT.Token)
+        Dim sendTask As Task = NetInt.SendAsync(request, CT.Token)
+        Dim listeningTask As Task(Of Packet) = NetInt.ReceiveAsync(CT.Token)    'listen for response, 2s timeout
 
-        Await newTask
+        Await sendTask
         Await listeningTask
 
         If CT.IsCancellationRequested Then
@@ -232,5 +287,11 @@ Class ServerTimeoutException
     Inherits Exception
     Sub New()
         MyBase.New("Server timeout.")
+    End Sub
+End Class
+Class ServerNotConnectedException
+    Inherits Exception
+    Sub New()
+        MyBase.New("Client connection not initialised.")
     End Sub
 End Class

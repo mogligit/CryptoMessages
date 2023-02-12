@@ -7,7 +7,6 @@ Imports SerializationService.Serialization
 
 Module PacketManager
     '**********SETTINGS**********
-    Const PORT As Integer = 13000
     Const ENCRYPTION_SECURITY_LEVEL As Integer = 64
     '****************************
 
@@ -32,14 +31,14 @@ Module PacketManager
         End Get
     End Property
 
-    Public Sub InitialiseNetInt()
-        NetInt = New NetworkConnection(IPAddress.Parse(Server.ServerIP), PORT)
-        NetInt.BeginListen()
-    End Sub
-    Public Sub CloseNetInt()
-        NetInt.EndListen()
-        NetInt = Nothing
-    End Sub
+    'Public Sub InitialiseNetInt()
+    '    NetInt = New NetworkConnection(IPAddress.Parse(Server.ServerIP), PORT)
+    '    NetInt.BeginListen()
+    'End Sub
+    'Public Sub CloseNetInt()
+    '    NetInt.EndListen()
+    '    NetInt = Nothing
+    'End Sub
 
     '
     'PROCEDURES MANAGING RECEIVED DATA
@@ -121,7 +120,7 @@ Module PacketManager
             CT.CancelAfter(Timeout)    'set timeout for cancellationtoken
         End If
 
-        Await NetInt.Send(data, CT.Token)
+        Await NetInt.SendAsync(data, CT.Token)
 
         If CT.IsCancellationRequested Then
             Throw New ServerTimeoutException
@@ -139,20 +138,25 @@ Module PacketManager
     '
     'SERVER FUNCTIONS FROM HERE
     '
+    Public Function TryConnect(ByVal IP As String) As Result
+        Try
+            Server = New ServerConnection(IP)
+            Return New Result(True, "Connected successfully.")
+        Catch ex As Exception
+            Return New Result(False, ex.Message)
+        End Try
+    End Function
     Public Async Function LogOffProtocol(ByVal data As UserData) As Task
         'ignore any exceptions when closing
-        CloseNetInt()
 
         Dim mResult As MsgBoxResult = MsgBox(String.Format("Would you like to backup all the messages you sent?{0}Please note that messages are stored{1}unencrypted in the database.", vbCrLf, vbCrLf), MsgBoxStyle.YesNo)
         Dim backupMessages As Boolean = (mResult = MsgBoxResult.Yes)
 
         Await UploadUserData(data, backupMessages)
         Await ChangeOnlineStatus(False, data.User)
-    End Function
 
-    Public Async Function TryConnect(ByVal IP As String) As Task(Of Result)
-        Server = New ServerConnection(IP, PORT)
-        Return Await Server.TryConnect()
+
+        Server.Disconnect() 'close socket connection to server
     End Function
     Public Async Function Login(ByVal Username As String, ByVal Password As String) As Task(Of Result)
         Dim loginRequest As New LoginAttempt(Username, Password)

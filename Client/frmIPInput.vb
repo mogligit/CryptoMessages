@@ -1,13 +1,13 @@
 ﻿Imports PacketType
 
 Public Class frmIPInput
-    Private Async Sub btnConnect_Click() Handles btnConnect.Click
+    Private Sub btnConnect_Click() Handles btnConnect.Click
         Dim ip As New Net.IPAddress(0)
         If Net.IPAddress.TryParse(txtServerIP.Text, ip) Then
             Loading = True
 
             Dim connectionResult As Result
-            connectionResult = Await PacketManager.TryConnect(ip.MapToIPv4.ToString)
+            connectionResult = PacketManager.TryConnect(ip.MapToIPv4.ToString)
 
             If connectionResult.OK Then
                 frmLogin.Show()
