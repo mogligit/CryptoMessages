@@ -22,5 +22,28 @@ NetworkInterface
   resource lookups using this strongly typed resource class.
 </summary>
 </member>
+<member name="M:NetworkInterface.SessionManager.ConnectAsync(System.Net.IPEndPoint,System.Threading.CancellationToken)">
+ <summary>
+ Creates a new connection with server. Only used by Client.
+ </summary>
+ <param name="endpoint"></param>
+ <param name="ct"></param>
+ <returns></returns>
+</member>
+<member name="M:NetworkInterface.SessionManager.StartListen(System.Int32,System.Threading.CancellationToken)">
+ <summary>
+ Listens for incoming connections. Only used by Server.
+ </summary>
+ <param name="port"></param>
+ <param name="ct"></param>
+</member>
+<member name="M:NetworkInterface.SessionManager.ListenAsync(System.Int32,System.Threading.CancellationToken)">
+ <summary>
+ Listens for incoming connections on <paramref name="port"/>. Raises the NewConnection event when a new connection is accepted.
+ </summary>
+ <param name="ct">Cancellation token to stop listening.</param>
+ <param name="port">Port to listen on.</param>
+ <remarks>This method will raise the event NewConnection indefinitely until the Cancellation Token is cancelled.</remarks>
+</member>
 </members>
 </doc>

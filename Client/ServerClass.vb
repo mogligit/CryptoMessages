@@ -11,14 +11,15 @@ Imports System.Net.Sockets
 'handles all connections to the server
 Public Class ServerConnection
     Private connected As Boolean = False    'default is false
-    Private IP As String
+    Private _serverEndpoint As IPEndPoint
     Private PORT As Integer = 13000     'default port is 13000
-    Private NetInt As NetworkConnection
+    Private WithEvents _session As SessionManager
+    Private TIMEOUT As Integer = 5000 'timeout in miliseconds
 
     Sub New(ByVal IP As String)
-        Me.IP = IP
+        _serverEndpoint = New IPEndPoint(IPAddress.Parse(IP), PORT)
         'initialise NetInt
-        NetInt = New NetworkConnection(IPAddress.Parse(IP).MapToIPv4, PORT)
+        _session = New SessionManager
         connected = ConnectAsync().Result
     End Sub
     Public ReadOnly Property IsConnected As Boolean
@@ -26,38 +27,129 @@ Public Class ServerConnection
             Return connected
         End Get
     End Property
-    Public ReadOnly Property ServerIP As String
+    Public ReadOnly Property ServerEndpoint As IPEndPoint
         Get
-            Return IP
+            Return _serverEndpoint
         End Get
     End Property
-    Public Async Function ConnectAsync() As Task(Of Boolean)
-        Dim nPing As New Ping
-        Dim nRandom As Integer = nPing.Random
-        Dim response As Packet
-        Dim pingResult As Ping
 
-        response = Await RequestAndResponse(nPing)
-        If Not IsNothing(response) Then
-            If response.GetType() = GetType(Ping) Then
-                pingResult = response
-                If pingResult.Random = nRandom Then
-                    connected = True
-                    Return True
-                Else
-                    'if the data in the ping is not the same
-                    Throw New UnknownTypeException
-                End If
-            Else
-                Throw New UnknownTypeException
-            End If
+    ''' <summary>
+    ''' This part of the code receives the PacketReceived event and redirects it wherever it needs to go.
+    ''' If the program is expecting a response, WaitingForResponse is set to True and the packet will be redirected to the RequestAndResponse method.
+    ''' If the program is not expecting a response, WaitingForResponse is set to False and the packet will be forwarded to PacketManager.
+    ''' </summary>
+    Private WaitingForResponse As Boolean = False
+    Private ResponsePacket As Packet
+    Private ResponseEndpoint As IPEndPoint
+    Private Sub ReceivePacket(ByVal packet As Packet, ByVal endpoint As IPEndPoint) Handles _session.PacketReceived
+        If WaitingForResponse Then
+            ResponsePacket = packet
+            ResponseEndpoint = endpoint
+            WaitingForResponse = False
         Else
-            Throw New NullResponseException
+            PacketManager.ReceivePacket(packet, endpoint)
         End If
+    End Sub
+
+    Private Async Function RequestAndResponse(ByVal request As Packet, Optional Timeout As Integer = 2000) As Task(Of Packet)
+        If Not IsConnected() Then
+            Throw New ServerNotConnectedException()
+        End If
+
+        Dim CT As New CancellationTokenSource
+
+        'if timeout is 0, wait indifinitely
+        If Not Timeout = 0 Then
+            CT.CancelAfter(Timeout)    'set timeout for cancellationtoken
+        End If
+
+        request.IsForServer = True
+        Debug.WriteLine("Sending request to server: " & request.GetType.ToString & "... ")
+        Dim sendTask As Task = _session.SendAsync(ServerEndpoint, request, CT.Token)
+        Await sendTask
+        Debug.Write("Sent.")
+
+        WaitingForResponse = True
+        Debug.WriteLine("Waiting for response... ")
+        Dim listeningTask As Task(Of Packet) = WaitForResponseAsync(CT.Token)    'listen for response, 2s timeout
+        Await listeningTask
+        Debug.Write("Received response from server: " & listeningTask.Result.GetType.ToString)
+        WaitingForResponse = False
+
+
+
+        If CT.IsCancellationRequested Then
+            Throw New ServerTimeoutException
+        Else
+            Return listeningTask.Result
+        End If
+
     End Function
-    Public Function Disconnect() As Boolean
-        Return NetInt.TryDisconnect()
+    Private Async Function WaitForResponseAsync(ct As CancellationToken) As Task(Of Packet)
+        Await Task.Run(Sub()
+                           Dim IsReceivedYet As Boolean = False
+
+                           Do While Not IsReceivedYet
+                               IsReceivedYet = Not (IsNothing(ResponsePacket) OrElse IsNothing(ResponseEndpoint) OrElse WaitingForResponse)
+                               Thread.Sleep(10)
+                           Loop
+                       End Sub, ct)
+
+        Return ResponsePacket
     End Function
+
+    Public Async Function SendPacketAsync(ByVal Data As Packet) As Task(Of Boolean)
+        Dim cts As New CancellationTokenSource
+
+        'if timeout is 0, wait indifinitely
+        If Not TIMEOUT = 0 Then
+            cts.CancelAfter(TIMEOUT)    'set timeout for cancellationtoken
+        End If
+
+        Dim successful As Boolean = Await _session.SendAsync(ServerEndpoint, Data, cts.Token)
+        Return successful
+    End Function
+
+    Public Async Function ConnectAsync() As Task(Of Boolean)
+        Dim cts As New CancellationTokenSource
+        cts.CancelAfter(TIMEOUT)
+
+        Dim successful As Boolean
+        Try
+            successful = Await _session.ConnectAsync(ServerEndpoint, cts.Token)
+            Return True
+        Catch ex As Exception
+            Return False
+        End Try
+    End Function
+
+    'Public Async Function ConnectAsync() As Task(Of Boolean)
+    '    Dim nPing As New Ping
+    '    Dim nRandom As Integer = nPing.Random
+    '    Dim response As Packet
+    '    Dim pingResult As Ping
+
+    '    response = Await RequestAndResponse(nPing)
+    '    If Not IsNothing(response) Then
+    '        If response.GetType() = GetType(Ping) Then
+    '            pingResult = response
+    '            If pingResult.Random = nRandom Then
+    '                connected = True
+    '                Return True
+    '            Else
+    '                'if the data in the ping is not the same
+    '                Throw New UnknownTypeException
+    '            End If
+    '        Else
+    '            Throw New UnknownTypeException
+    '        End If
+    '    Else
+    '        Throw New NullResponseException
+    '    End If
+    'End Function
+    Public Sub Disconnect()
+        _session.Disconnect(ServerEndpoint)
+    End Sub
     Private Async Function TryConnect() As Task(Of Result)
         Dim nPing As New Ping
         Dim nRandom As Integer = nPing.Random
@@ -123,6 +215,8 @@ Public Class ServerConnection
         Dim ciphertext As ElgamalCiphertext
         ciphertext = ElgamalService.Encrypt(ToByte(LoginRequest), serverPubKey)
 
+
+        Debug.WriteLine(String.Format("Attempting login - U:{0}", LoginRequest.User))
 
         Dim response As Packet
         Dim loginResponse As LoginResponse
@@ -243,32 +337,6 @@ Public Class ServerConnection
         End Try
     End Function
 
-    Private Async Function RequestAndResponse(ByVal request As Packet, Optional Timeout As Integer = 2000) As Task(Of Packet)
-        If Not IsConnected() Then
-            Throw New ServerNotConnectedException()
-        End If
-
-        Dim CT As New CancellationTokenSource
-
-        'if timeout is 0, wait indifinitely
-        If Not Timeout = 0 Then
-            CT.CancelAfter(Timeout)    'set timeout for cancellationtoken
-        End If
-
-        request.IsForServer = True
-        Dim sendTask As Task = NetInt.SendAsync(request, CT.Token)
-        Dim listeningTask As Task(Of Packet) = NetInt.ReceiveAsync(CT.Token)    'listen for response, 2s timeout
-
-        Await sendTask
-        Await listeningTask
-
-        If CT.IsCancellationRequested Then
-            Throw New ServerTimeoutException
-        Else
-            Return listeningTask.Result
-        End If
-
-    End Function
 End Class
 
 Class UnknownTypeException

@@ -10,8 +10,7 @@ Module PacketManager
     Const ENCRYPTION_SECURITY_LEVEL As Integer = 64
     '****************************
 
-    Private Server As ServerConnection
-    Private WithEvents NetInt As NetworkConnection
+    Private WithEvents Server As ServerConnection
 
     Private WithEvents Elgamal As ElgamalService
     Private LocalPublicKey As ElgamalPublicKey
@@ -21,7 +20,7 @@ Module PacketManager
 
     Public ReadOnly Property ServerIP() As String
         Get
-            Return Server.ServerIP
+            Return Server.ServerEndpoint.ToString
         End Get
     End Property
 
@@ -32,8 +31,7 @@ Module PacketManager
     End Property
 
     'Public Sub InitialiseNetInt()
-    '    NetInt = New NetworkConnection(IPAddress.Parse(Server.ServerIP), PORT)
-    '    NetInt.BeginListen()
+    '    Server.ConnectAsync()
     'End Sub
     'Public Sub CloseNetInt()
     '    NetInt.EndListen()
@@ -43,7 +41,7 @@ Module PacketManager
     '
     'PROCEDURES MANAGING RECEIVED DATA
     '
-    Private Sub ReceivePacket(ByVal data As Packet, ByVal origin As String) Handles NetInt.OnPacketReceived
+    Public Sub ReceivePacket(ByVal data As Packet, ByVal origin As IPEndPoint)
         Select Case data.GetType
             Case GetType(Message)
                 ManageMessage(DirectCast(data, Message))
@@ -82,7 +80,7 @@ Module PacketManager
             Dim encryptedMessage As ElgamalCiphertext = ElgamalService.Encrypt(byteMessage, RecipientPublicKey)
             Dim messageToSend As New Message(Now, Sender, Recipient, encryptedMessage)
 
-            Await Send(messageToSend)
+            Await Server.SendPacketAsync(messageToSend)
             Return New Result(True)
         Catch ex As Exception
             Return New Result(False, ex.Message)
@@ -93,7 +91,7 @@ Module PacketManager
         Dim friendRequest As New FriendRequest(MeUser, Recipient)
 
         Try
-            Dim sendTask As Task = Send(friendRequest)
+            Dim sendTask As Task = Server.SendPacketAsync(friendRequest)
             Dim result As Result = Await ResultCompletionSource.Task  'waiting for Result which is received from ResultTask
             Return result
         Catch ex As Exception
@@ -104,27 +102,11 @@ Module PacketManager
         MeUser.PublicKey = LocalPublicKey
         Dim friendResponse As New FriendResponse(IsAccepted, MeUser, Recipient)
         Try
-            Await Send(friendResponse)
+            Await Server.SendPacketAsync(friendResponse)
             Return New Result(True)
         Catch ex As Exception
             Return New Result(False, ex.Message)
         End Try
-    End Function
-
-    'general send function
-    Private Async Function Send(ByVal data As Packet, Optional Timeout As Integer = 5000) As Task
-        Dim CT As New CancellationTokenSource
-
-        'if timeout is 0, wait indifinitely
-        If Not Timeout = 0 Then
-            CT.CancelAfter(Timeout)    'set timeout for cancellationtoken
-        End If
-
-        Await NetInt.SendAsync(data, CT.Token)
-
-        If CT.IsCancellationRequested Then
-            Throw New ServerTimeoutException
-        End If
     End Function
 
     Class ServerErrorException

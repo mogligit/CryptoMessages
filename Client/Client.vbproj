@@ -178,9 +178,9 @@
       <Project>{6b1f2b60-a500-4255-be2d-b0f063bf8632}</Project>
       <Name>Elgamal</Name>
     </ProjectReference>
-    <ProjectReference Include="..\NetworkInterface\NetworkInterface.vbproj">
+    <ProjectReference Include="..\NetworkInterface\Network.vbproj">
       <Project>{bce30c31-22bd-4bf1-bc6c-9c0697c7dab4}</Project>
-      <Name>NetworkInterface</Name>
+      <Name>Network</Name>
     </ProjectReference>
     <ProjectReference Include="..\PacketType\PacketType.vbproj">
       <Project>{87722bf6-775c-4ff6-b3f3-abce9609c6d9}</Project>

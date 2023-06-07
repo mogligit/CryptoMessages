@@ -5,27 +5,33 @@ Imports System.Numerics
 Imports Elgamal
 Imports SHAService
 Imports System.Threading
-Imports Serializationservice.serialization
+Imports Serializationservice.Serialization
+Imports System.Net.Sockets
 
-Module PacketManager
+Module MessageManager
     'SETTINGS
-    Const defPORT As Integer = 13000
-    'dictionary to map IP addresses to local cryptographic keys
-    Private IPKeyMap As New Dictionary(Of String, ElgamalKeyPair)
+    Const DEFAULT_LOCAL_PORT As Integer = 13000
 
     '
     'DICTIONARIES
     '
+    'dictionary to map IP addresses to local cryptographic keys
+    Private EndpointKeyMap As New Dictionary(Of IPEndPoint, ElgamalKeyPair)
     'dictionary to map logged-in users to their respective IP address
-    Private UserIPAddressMap As New Dictionary(Of String, String)
+    Private UserEndpointMap As New Dictionary(Of String, IPEndPoint)
     'dictionary to map logged-in users to their public key
     Private UserPublicKeyMap As New Dictionary(Of String, ElgamalPublicKey)
+
+
     'list to index all users that are online
     Private OnlineUsers As New List(Of String)
 
     Private LocalPublicKey As ElgamalPublicKey
 
-    Private WithEvents NetListener As NetworkConnection
+
+    Private listenTask As Task
+    Private ListenCT As New CancellationTokenSource
+    Private WithEvents sessions As New SessionManager
 
     Public Sub STARTUP(Optional SecurityLevel As Integer = 64)
         frmMain.ConsoleOutput("Generating {0}-bit cryptographic keys...", SecurityLevel)
@@ -34,13 +40,14 @@ Module PacketManager
         frmMain.ConsoleOutput("Done.")
 
         DatabaseInterface.StartConnection()
-        StartListener()
+
+        StartListenAsync()
         frmMain.ConsoleOutput("Ready.")
     End Sub
 
     Public Sub SHUTDOWN(ByVal CloseWindow As Boolean)
-        If (Not IsNothing(NetListener)) AndAlso NetListener.IsListening Then
-            StopListener()
+        If sessions.IsListening Then
+            StopListen()
         End If
         If DatabaseInterface.IsConnected Then
             DatabaseInterface.StopConnection()
@@ -50,21 +57,27 @@ Module PacketManager
         End If
     End Sub
 
-    Private Sub StartListener(Optional PORT As Integer = defPORT)
-        If (Not IsNothing(NetListener)) AndAlso NetListener.IsListening Then
-            frmMain.ConsoleOutput("Listener is already running.")
+    Private Sub StartListenAsync(Optional PORT As Integer = DEFAULT_LOCAL_PORT)
+        If sessions.IsListening Then
+            frmMain.ConsoleOutput("Interface is already running.")
         Else
-            NetListener = New NetworkConnection(defPORT)
-            NetListener.BeginListen()
-            frmMain.ConsoleOutput("Listener is now listening at port {0}.", defPORT)
+            Try
+                sessions.StartListen(PORT, ListenCT.Token)
+                frmMain.ConsoleOutput("Socket now listening on port {0}.", PORT)
+            Catch ex As Exception
+                frmMain.ConsoleOutput("Could not start listening.", PORT)
+            End Try
         End If
     End Sub
-    Private Sub StopListener()
-        If (Not IsNothing(NetListener)) AndAlso NetListener.IsListening Then
-            NetListener.EndListen()
-            frmMain.ConsoleOutput("Listener stopped successfully.")
-        Else
-            frmMain.ConsoleOutput("Listener is already stopped.")
+    Private Sub OnNewConnection(ByVal endpoint As IPEndPoint) Handles sessions.NewConnection
+        frmMain.ConsoleOutput("New connection from {0}.", endpoint.ToString)
+    End Sub
+    Private Sub StopListen()
+        If listenTask.Status = TaskStatus.Running Then
+            ListenCT.Cancel()
+            frmMain.ConsoleOutput("Socket closed and no longer accepting connections.")
+        ElseIf listenTask.IsCompleted Then
+            frmMain.ConsoleOutput("Socket is already closed.")
         End If
     End Sub
 
@@ -95,12 +108,12 @@ Module PacketManager
                     Select Case args(1)
                         Case "start"
                             If args.Length = 2 Then
-                                StartListener()
+                                StartListenAsync()
                             Else
-                                StartListener(args(Array.IndexOf(args, "-p") + 1))
+                                StartListenAsync(args(Array.IndexOf(args, "-p") + 1))
                             End If
                         Case "stop"
-                            StopListener()
+                            StopListen()
                     End Select
                 Case "help"
                     frmMain.DisplayHelp()
@@ -117,42 +130,42 @@ Module PacketManager
 
     End Sub
 
-    Private Sub PacketReceived(ByVal data As Packet, ByVal origin As String) Handles NetListener.OnPacketReceived
-        frmMain.ConsoleOutput("{0} RECEIVED FROM {1}", data.GetType.Name.ToUpper, origin)
+    Private Sub PacketReceived(ByVal packet As Packet, ByVal endpoint As IPEndPoint) Handles sessions.PacketReceived
+        frmMain.ConsoleOutput("{0} RECEIVED FROM {1}", packet.GetType.Name.ToUpper, endpoint.ToString)
 
-        If data.IsForServer AndAlso data.GetType = GetType(ElgamalCiphertext) Then
-            data = Decrypt(DirectCast(data, ElgamalCiphertext), origin)
+        If packet.IsForServer AndAlso packet.GetType = GetType(ElgamalCiphertext) Then
+            packet = Decrypt(DirectCast(packet, ElgamalCiphertext), endpoint)
         End If
 
-        Select Case data.GetType
+        Select Case packet.GetType
             Case GetType(Ping)
-                ManagePing(DirectCast(data, Ping), origin)
+                ManagePing(DirectCast(packet, Ping), endpoint)
             Case GetType(LoginAttempt)
-                ManageLoginAttempt(DirectCast(data, LoginAttempt), origin)
+                ManageLoginAttempt(DirectCast(packet, LoginAttempt), endpoint)
             Case GetType(RegisterAttempt)
-                ManageRegisterAttempt(DirectCast(data, RegisterAttempt), origin)
+                ManageRegisterAttempt(DirectCast(packet, RegisterAttempt), endpoint)
             Case GetType(PublicKeyRequest)
-                ManagePublicKeyRequest(DirectCast(data, PublicKeyRequest), origin)
+                ManagePublicKeyRequest(DirectCast(packet, PublicKeyRequest), endpoint)
             Case GetType(UserDataRequest)
-                ManageUserDataRequest(DirectCast(data, UserDataRequest), origin)
+                ManageUserDataRequest(DirectCast(packet, UserDataRequest), endpoint)
             Case GetType(Message)
-                ManageMessage(DirectCast(data, Message), origin)
+                ManageMessage(DirectCast(packet, Message), endpoint)
             Case GetType(FriendRequest)
-                ManageFriendRequest(DirectCast(data, FriendRequest), origin)
+                ManageFriendRequest(DirectCast(packet, FriendRequest), endpoint)
             Case GetType(FriendResponse)
-                ManageFriendResponse(DirectCast(data, FriendResponse), origin)
+                ManageFriendResponse(DirectCast(packet, FriendResponse), endpoint)
             Case GetType(UserStatusNotification)
-                ManageUserStatusNotification(DirectCast(data, UserStatusNotification), origin)
+                ManageUserStatusNotification(DirectCast(packet, UserStatusNotification), endpoint)
             Case GetType(UserData)
-                ManageUserDataUpload(DirectCast(data, UserData), origin)
+                ManageUserDataUpload(DirectCast(packet, UserData), endpoint)
         End Select
     End Sub
 
-    Private Sub ManagePing(ByVal data As Ping, ByVal origin As String)
+    Private Sub ManagePing(ByVal data As Ping, ByVal origin As IPEndPoint)
         Send(data, origin)
     End Sub
-    Private Sub ManageLoginAttempt(ByVal attempt As LoginAttempt, ByVal origin As String)
-        frmMain.ConsoleOutput("     Attempt to log in with credentials: [{0}, {1}].", attempt.User, attempt.Password)
+    Private Sub ManageLoginAttempt(ByVal attempt As LoginAttempt, ByVal origin As IPEndPoint)
+        frmMain.ConsoleOutput("     Attempt to log in with credentials: [{0}:{1}].", attempt.User, attempt.Password)
 
         Dim realPasswordHash As Byte()
         Dim attemptPasswordHash As Byte()
@@ -164,7 +177,7 @@ Module PacketManager
                 frmMain.ConsoleOutput("     Hash from database and user match.")
 
                 'getting this IP's assigned public key
-                Dim userKeyPair As ElgamalKeyPair = IPKeyMap.Item(origin)
+                Dim userKeyPair As ElgamalKeyPair = EndpointKeyMap.Item(origin)
 
                 'hash = username + password + one-time cryptokey
                 Dim response As New LoginResponse(HashService.ComputeHash(attempt.User, attempt.Password, userKeyPair.PublicKey))
@@ -181,7 +194,7 @@ Module PacketManager
             Send(New LoginResponse(False), origin)
         End Try
     End Sub
-    Private Sub ManageRegisterAttempt(ByVal attempt As RegisterAttempt, ByVal origin As String)
+    Private Sub ManageRegisterAttempt(ByVal attempt As RegisterAttempt, ByVal origin As IPEndPoint)
         frmMain.ConsoleOutput("     New user to be added to database:")
         frmMain.ConsoleOutput("         Username: {0}", attempt.User.Username)
         frmMain.ConsoleOutput("         First name: {0}", attempt.User.FirstName)
@@ -189,7 +202,6 @@ Module PacketManager
         frmMain.ConsoleOutput("         Password: {0}", attempt.Password)
 
         Dim passwordHash As Byte() = HashService.ComputeHash(ToByte(attempt.Password))
-        Dim NetInt As New NetworkConnection(IPAddress.Parse(origin), defPORT)
 
         Try
             DatabaseInterface.CreateNewUser(attempt.User.Username, attempt.User.FirstName, attempt.User.Surname, passwordHash)
@@ -201,23 +213,23 @@ Module PacketManager
             Send(New Result(False) With {.Message = ex.Message}, origin)
         End Try
     End Sub
-    Private Sub ManagePublicKeyRequest(ByVal request As PublicKeyRequest, ByVal origin As String)
+    Private Sub ManagePublicKeyRequest(ByVal request As PublicKeyRequest, ByVal origin As IPEndPoint)
         Dim newKeyPair As ElgamalKeyPair
         'generating a new public+private key pair for each IP address that requests it
         newKeyPair = ElgamalService.GenerateNewKeyPair(LocalPublicKey.p, LocalPublicKey.g)
-        If Not IPKeyMap.ContainsKey(origin) Then   'if IP is not registered
-            IPKeyMap.Add(origin, newKeyPair)   'creating new entry in dictionary
+        If Not EndpointKeyMap.ContainsKey(origin) Then   'if IP is not registered
+            EndpointKeyMap.Add(origin, newKeyPair)   'creating new entry in dictionary
         Else
-            IPKeyMap.Item(origin) = newKeyPair
+            EndpointKeyMap.Item(origin) = newKeyPair
         End If
-        frmMain.ConsoleOutput("     New key pair generated. Associated to {0}", origin)
+        frmMain.ConsoleOutput("     New key pair generated. Associated to {0}", origin.ToString)
         frmMain.ConsoleOutput("         Pr: {0}", newKeyPair.PrivateKey.ToString)
         frmMain.ConsoleOutput("         Pb: {0}", newKeyPair.PublicKey.y.ToString)
 
         'returning public key only
         Send(newKeyPair.PublicKey, origin)
     End Sub
-    Private Sub ManageUserDataRequest(ByVal request As UserDataRequest, ByVal origin As String)
+    Private Sub ManageUserDataRequest(ByVal request As UserDataRequest, ByVal origin As IPEndPoint)
         frmMain.ConsoleOutput("     UserData requested by {0}.", request.Username)
         Dim userPubKey As ElgamalPublicKey = request.PublicKey
         Dim userData As UserData
@@ -237,20 +249,20 @@ Module PacketManager
 
         Send(encryptedUserData, origin)
     End Sub
-    Private Sub ManageMessage(ByVal data As Message, ByVal origin As String)    'relays incoming messages to the right user
-        Dim destinationIP As String = UserIPAddressMap(data.Recipient)
-        Send(data, destinationIP)
-        frmMain.ConsoleOutput("     Message forwarded from {0} to {1}.", origin, destinationIP)
+    Private Sub ManageMessage(ByVal data As Message, ByVal origin As IPEndPoint)    'relays incoming messages to the right user
+        Dim destination As IPEndPoint = UserEndpointMap(data.Recipient)
+        Send(data, destination)
+        frmMain.ConsoleOutput("     Message forwarded from {0} to {1}.", origin.ToString, destination.ToString)
     End Sub
-    Private Sub ManageFriendRequest(ByVal request As FriendRequest, ByVal origin As String)
+    Private Sub ManageFriendRequest(ByVal request As FriendRequest, ByVal origin As IPEndPoint)
         frmMain.ConsoleOutput("     {0} sent a friend request to {1}.", request.Requester.Username, request.PersonBeingRequested)
         Try
             'this is getting the actual username for this person. it allows friend requests to be non-case-sensitive
             Dim personBeingRequested As String
             personBeingRequested = DatabaseInterface.GetSingleUserDetails(request.PersonBeingRequested).Username
-            If OnlineUsers.Contains(PersonBeingRequested) Then
-                Dim destinationIP As String = UserIPAddressMap(PersonBeingRequested)
-                Send(request, destinationIP)
+            If OnlineUsers.Contains(personBeingRequested) Then
+                Dim destination As IPEndPoint = UserEndpointMap(personBeingRequested)
+                Send(request, destination)
                 Send(New Result(True), origin)
             Else
                 frmMain.ConsoleOutput("     {0} was not online. Cannot send friend request.", request.PersonBeingRequested)
@@ -261,11 +273,11 @@ Module PacketManager
             Send(New Result(False, ex.Message), origin)
         End Try
     End Sub
-    Private Sub ManageFriendResponse(ByVal response As FriendResponse, ByVal origin As String)
+    Private Sub ManageFriendResponse(ByVal response As FriendResponse, ByVal origin As IPEndPoint)
         If OnlineUsers.Contains(response.Requester) Then    'relays response to the requester
             response.PersonBeingRequested.IsOnline = True   'tells requester that the person being requested is online
-            Dim destinationIP As String = UserIPAddressMap(response.Requester)
-            Send(response, destinationIP)
+            Dim destination As IPEndPoint = UserEndpointMap(response.Requester)
+            Send(response, destination)
         End If
 
         'requester does not need to be online because friendship can be added to the database
@@ -275,18 +287,18 @@ Module PacketManager
             frmMain.ConsoleOutput("     Friend response added to database. {0} and {1} are now friends.", response.Requester, response.PersonBeingRequested.Username)
         End If
     End Sub
-    Private Sub ManageUserStatusNotification(ByVal notification As UserStatusNotification, ByVal origin As String)
+    Private Sub ManageUserStatusNotification(ByVal notification As UserStatusNotification, ByVal origin As IPEndPoint)
         If notification.IsConnected Then
             'this is checked in case a user closed the program without logging out
             'data just gets overwritten
             If OnlineUsers.Contains(notification.User) Then
                 OnlineUsers.Remove(notification.User)
-                UserIPAddressMap.Remove(notification.User)
+                UserEndpointMap.Remove(notification.User)
                 UserPublicKeyMap.Remove(notification.User)
             End If
             OnlineUsers.Add(notification.User)
             'associate logged in user to their IP
-            UserIPAddressMap.Add(notification.User, origin)
+            UserEndpointMap.Add(notification.User, origin)
             'store user's public key in order to share it with other users
             UserPublicKeyMap.Add(notification.User, notification.PublicKey)
 
@@ -294,7 +306,7 @@ Module PacketManager
             frmMain.ConsoleOutput("     {0} is now ONLINE.", notification.User)
         Else
             OnlineUsers.Remove(notification.User)
-            UserIPAddressMap.Remove(notification.User)
+            UserEndpointMap.Remove(notification.User)
             UserPublicKeyMap.Remove(notification.User)
             frmMain.ConsoleOutput("     {0} is now OFFLINE.", notification.User)
         End If
@@ -303,14 +315,14 @@ Module PacketManager
         'forwards the notification to all this user's friends
         For Each username In friendList
             If OnlineUsers.Contains(username) Then
-                Dim destinationIP As String = UserIPAddressMap(username)
-                Send(notification, destinationIP)
+                Dim destination As IPEndPoint = UserEndpointMap(username)
+                Send(notification, destination)
             End If
         Next
 
         Send(New Result(True), origin)
     End Sub
-    Private Sub ManageUserDataUpload(ByVal data As UserData, ByVal origin As String)
+    Private Sub ManageUserDataUpload(ByVal data As UserData, ByVal origin As IPEndPoint)
         Dim user As User = data.User
         Dim clientSettings As ClientSettings = data.ClientSettings
         Dim messages As UnencryptedMessage() = data.Messages.ToArray
@@ -324,29 +336,27 @@ Module PacketManager
         End Try
     End Sub
 
-    Private Function Decrypt(ByVal data As ElgamalCiphertext, ByVal origin As String) As Packet
+    Private Function Decrypt(ByVal data As ElgamalCiphertext, ByVal origin As IPEndPoint) As Packet
         Try
-            Dim userKeyPair As ElgamalKeyPair = IPKeyMap(origin)
+            Dim userKeyPair As ElgamalKeyPair = EndpointKeyMap(origin)
 
             Dim bArray As Byte() = ElgamalService.Decrypt(data, userKeyPair)
             Return DirectCast(ToObj(bArray), Packet)
         Catch ex As Exception
-            frmMain.ConsoleOutput("ERROR. DATA FROM {0} CANNOT BE DECRYPTED.", origin)
+            frmMain.ConsoleOutput("ERROR. DATA FROM {0} CANNOT BE DECRYPTED.", origin.ToString)
             Return data
         End Try
     End Function
 
-    Private Sub Send(ByVal Data As Object, ByVal Destination As String)
-        Dim NetInt As New NetworkConnection(IPAddress.Parse(Destination), defPORT)
-
+    Private Sub Send(ByVal Data As Object, ByVal Destination As IPEndPoint)
         Dim CT As New CancellationTokenSource
         CT.CancelAfter(2000)
 
         Try
-            NetInt.Send(Data, CT.Token)
-            frmMain.ConsoleOutput("     {0} sent to {1} successfully.", Data.GetType.Name, Destination)
+            sessions.SendAsync(Destination, Data, CT.Token)
+            frmMain.ConsoleOutput("     {0} sent to {1} successfully.", Data.GetType.Name, Destination.ToString)
         Catch ex As Exception
-            frmMain.ConsoleOutput("     ERROR: {0} could NOT be sent to {1}.", Data.GetType.Name, Destination)
+            frmMain.ConsoleOutput("     ERROR: {0} could NOT be sent to {1}.", Data.GetType.Name, Destination.ToString)
             frmMain.ConsoleOutput("     {0}", ex.Message)
         End Try
     End Sub

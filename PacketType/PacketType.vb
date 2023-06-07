@@ -1,5 +1,6 @@
 ﻿Imports System.Numerics
 Imports System.Drawing
+Imports System.Net
 
 <Serializable>
 Public MustInherit Class Packet

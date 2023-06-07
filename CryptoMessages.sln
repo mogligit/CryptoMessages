@@ -9,7 +9,7 @@ Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "Server", "Server\Server.vbp
 EndProject
 Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "Elgamal", "Elgamal\Elgamal.vbproj", "{6B1F2B60-A500-4255-BE2D-B0F063BF8632}"
 EndProject
-Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "NetworkInterface", "NetworkInterface\NetworkInterface.vbproj", "{BCE30C31-22BD-4BF1-BC6C-9C0697C7DAB4}"
+Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "Network", "NetworkInterface\Network.vbproj", "{BCE30C31-22BD-4BF1-BC6C-9C0697C7DAB4}"
 EndProject
 Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "PacketType", "PacketType\PacketType.vbproj", "{87722BF6-775C-4FF6-B3F3-ABCE9609C6D9}"
 EndProject

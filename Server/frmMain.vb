@@ -10,7 +10,7 @@
         Me.ActiveControl = txtCommandInput
     End Sub
     Public Sub frmMain_Close() Handles Me.FormClosing
-        PacketManager.SHUTDOWN(False)
+        MessageManager.SHUTDOWN(False)
     End Sub
 
     Private Sub txtCommandInput_KeyDown(sender As Object, e As KeyPressEventArgs) Handles txtCommandInput.KeyPress
@@ -21,7 +21,7 @@
 
             Dim args As String()
             args = txtCommandInput.Text.ToLower.Split({" "}, StringSplitOptions.RemoveEmptyEntries)
-            PacketManager.HandleCommand(args)
+            MessageManager.HandleCommand(args)
 
             txtCommandInput.Clear()
 

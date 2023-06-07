@@ -24,7 +24,7 @@ Public Class frmMain
         'notify server that this user is online
         Await PacketManager.ChangeOnlineStatus(True, MeUser)
 
-        PacketManager.InitialiseNetInt()
+        'PacketManager.InitialiseNetInt()       server variable should already be initialised
         frmLoading.Close()
         Me.Enabled = True
         Me.BringToFront()

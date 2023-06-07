@@ -76,53 +76,66 @@ Public Class ElgamalService
 
 
     Public Shared Function Encrypt(ByVal Plaintext As Byte(), ByVal RemotePublicKey As ElgamalPublicKey) As ElgamalCiphertext
+        Debug.WriteLine("--Encryption--")
         Dim i As BigInteger     'single-use random number
         Dim maskingKey As BigInteger 'masking key
-        Dim plaintextList As List(Of Byte) = Plaintext.ToList
+        Dim plaintextBytes As List(Of Byte) = Plaintext.ToList
 
         Dim ciphertext As ElgamalCiphertext
         Dim C1 As BigInteger    'ephimeral key (based on i)
         Dim C2 As New List(Of BigInteger)
 
-        Dim plaintextByteList As New List(Of Byte())
-        Dim plaintextIntList As New List(Of BigInteger)
+        Dim plaintextChunks As New List(Of Byte())    'list of byte arrays
+        Dim plaintextIntChunks As New List(Of BigInteger)
 
         'If the plaintext is bigger than p (the prime in the public key) it will not be correctly encrypted
         'and the data will be useless. So this code here splits the byte array into chunks that are smaller
         'than p and encrypts them separately. An extra byte 255 is added at the end to make sure all bytes
         'are included in the final integer (if the final bytes were all 0s, they would not be included and
         'data would be lost).
-        Dim sizeOfp As Integer = (SizeOf(RemotePublicKey.p) \ 8) - 2  'size of p in bytes (-1 for extra byte)
+        Dim chunkSize As Integer = CInt(Math.Ceiling(SizeOf(RemotePublicKey.p) / 8)) - 3  'size of p in bytes (-1 for extra byte)
+        Debug.WriteLine("Size of P in bytes: " & chunkSize.ToString)
         'splitting PlaintextByte into chunks
+        Debug.WriteLine("Plaintext: " & BitConverter.ToString(plaintextBytes.ToArray()))
         Do
-            Dim currentSection As List(Of Byte) = plaintextList.Take(sizeOfp).ToList 'splitting sizeOfp amount of bytes
+            Dim currentSection As List(Of Byte) = plaintextBytes.Take(chunkSize).ToList 'splitting sizeOfp amount of bytes
             currentSection.Add(CByte(1)) 'adding an extra byte at the end
 
-            plaintextByteList.Add(currentSection.ToArray)   'adding to the list
+            plaintextChunks.Add(currentSection.ToArray)   'adding to the list
+            Debug.WriteLine("Added new chunk to list: " & BitConverter.ToString(currentSection.ToArray()))
 
-            If plaintextList.Count >= sizeOfp Then  'if list is still bigger than p
-                plaintextList.RemoveRange(0, sizeOfp)
+            If plaintextBytes.Count >= chunkSize Then  'if list is still bigger than p
+                plaintextBytes.RemoveRange(0, chunkSize)
             Else
-                plaintextList.Clear()
+                plaintextBytes.Clear()
             End If
-        Loop While plaintextList.Count > 0
+        Loop While plaintextBytes.Count > 0
 
         'turning all byte() into a multiplicable integers
-        For Each plaintextByteChunk In plaintextByteList
-            plaintextIntList.Add(BigInteger.Abs(New BigInteger(plaintextByteChunk)))
+        For Each plaintextChunk In plaintextChunks
+            Dim plainInt As BigInteger = BigInteger.Abs(New BigInteger(plaintextChunk))
+            plaintextIntChunks.Add(plainInt)
+
+            Debug.WriteLine("Integers: " & plainInt.ToString)
         Next
 
         'computing C1 (ephimeral key Ke)
         'C1 = (g^i) mod p
         i = GenerateRandomInteger(2, SizeOf(RemotePublicKey.p - 2))
         C1 = BigInteger.ModPow(RemotePublicKey.g, i, RemotePublicKey.p)
+        Debug.WriteLine("C1: " & C1.ToString)
 
         'computing C2 (the ciphertext). Plaintext = P
         'Km = (y^i) mod p
         'C2 = (P*Km) mod p
         maskingKey = BigInteger.ModPow(RemotePublicKey.y, i, RemotePublicKey.p)
-        For Each plaintextInt In plaintextIntList
-            C2.Add((plaintextInt * maskingKey) Mod RemotePublicKey.p)
+        Debug.WriteLine("Masking key: " & maskingKey.ToString)
+
+        For Each plaintextInt In plaintextIntChunks
+            Dim cipherInt As BigInteger = (plaintextInt * maskingKey) Mod RemotePublicKey.p
+            C2.Add(cipherInt)
+
+            Debug.WriteLine("Cipher integers: " & cipherInt.ToString)
         Next
 
         ciphertext = New ElgamalCiphertext(C1, C2.ToArray)
@@ -132,7 +145,7 @@ Public Class ElgamalService
 
     'decrypt with private key stored in the instance of this object
     Public Overloads Function Decrypt(ByVal Ciphertext As ElgamalCiphertext) As Byte()
-        Dim plaintextList As New List(Of Byte)
+        Dim plaintextBytes As New List(Of Byte)
         Dim maskingKey As BigInteger
         Dim invModOfKm As BigInteger
 
@@ -140,6 +153,7 @@ Public Class ElgamalService
         'Km = Masking key   -   Ke = Ephimeral key
         'Km = (Ke^d) mod p
         maskingKey = BigInteger.ModPow(Ciphertext.C1, LocalKeyPair.PrivateKey, LocalKeyPair.PublicKey.p)
+        Debug.WriteLine("Masking key: " & maskingKey.ToString)
 
         'Calculating the inverse modulo of Km
         '(Km^-1) mod p
@@ -148,19 +162,22 @@ Public Class ElgamalService
         'Computing plaintext
         'P = (C2*(Km^-1)) mod p
         For Each cipherInt In Ciphertext.C2
+            Debug.WriteLine("Cipher integer: " & cipherInt.ToString)
+
             Dim plaintextInt As BigInteger
             'decrypting the integer into a byte array
             plaintextInt = (cipherInt * invModOfKm) Mod LocalKeyPair.PublicKey.p
+            Debug.WriteLine("Plain integer: " & plaintextInt.ToString)
 
             'because the byte array has an extra byte it needs to be removed
-            Dim plaintextIntByteArray As List(Of Byte) = plaintextInt.ToByteArray.ToList
-            plaintextIntByteArray.RemoveAt(plaintextIntByteArray.Count - 1) 'removing last bit
+            Dim plaintextChunk As List(Of Byte) = plaintextInt.ToByteArray.ToList
+            plaintextChunk.RemoveAt(plaintextChunk.Count - 1) 'removing last bit
 
             'concatenating all byte lists
-            plaintextList = plaintextList.Concat(plaintextIntByteArray).ToList
+            plaintextBytes = plaintextBytes.Concat(plaintextChunk).ToList
         Next
 
-        Return plaintextList.ToArray
+        Return plaintextBytes.ToArray
     End Function
     'decrypt with a remote private key
     Public Overloads Shared Function Decrypt(ByVal Ciphertext As ElgamalCiphertext, ByVal RemoteKeyPair As ElgamalKeyPair) As Byte()
@@ -201,7 +218,8 @@ Public Class ElgamalService
     End Function
 
     Public Shared Function SizeOf(ByVal n As BigInteger) As Integer
-        Return CInt(BigInteger.Log(n, 2) + 1)
+        Dim log As Double = BigInteger.Log(n + 1, 2)
+        Return CInt(Math.Ceiling(log))
     End Function
     Public Shared Function GenerateRandomInteger(ByVal lowerBoundBits As Double, ByVal upperBoundBits As Double) As BigInteger
         Dim randomSize As Integer
