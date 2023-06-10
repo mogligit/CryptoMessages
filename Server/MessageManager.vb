@@ -28,8 +28,6 @@ Module MessageManager
 
     Private LocalPublicKey As ElgamalPublicKey
 
-
-    Private listenTask As Task
     Private ListenCT As New CancellationTokenSource
     Private WithEvents sessions As New SessionManager
 
@@ -73,10 +71,10 @@ Module MessageManager
         frmMain.ConsoleOutput("New connection from {0}.", endpoint.ToString)
     End Sub
     Private Sub StopListen()
-        If listenTask.Status = TaskStatus.Running Then
+        If Not ListenCT.IsCancellationRequested Then
             ListenCT.Cancel()
             frmMain.ConsoleOutput("Socket closed and no longer accepting connections.")
-        ElseIf listenTask.IsCompleted Then
+        Else
             frmMain.ConsoleOutput("Socket is already closed.")
         End If
     End Sub
