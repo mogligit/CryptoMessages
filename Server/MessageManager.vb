@@ -123,7 +123,7 @@ Module MessageManager
                     frmMain.ConsoleOutput("Command not recognised. Please try again.")
             End Select
         Catch ex As Exception
-            frmMain.ConsoleOutput("Command not valid. Please try again.")
+            frmMain.ConsoleOutput("Failed to execute command. Reason: " & ex.Message)
         End Try
 
     End Sub
