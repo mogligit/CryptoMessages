@@ -96,7 +96,7 @@ Class DatabaseInterface
 
     End Sub
     Public Shared Function GetUserHash(ByVal Username As String) As Byte()
-        Dim hashSql As String = "SELECT passwd FROM _User WHERE Username=@Username;"
+        Dim hashSql As String = "SELECT Passwd FROM _User WHERE Username=@Username;"
         Dim hashCommand As New SQLiteCommand(hashSql, dbConnection)
 
         hashCommand.Parameters.AddWithValue("@Username", Username)
@@ -143,7 +143,7 @@ Class DatabaseInterface
         End Using
 
         'query that outputs all friends of username @me
-        Dim friendsSql As String = "SELECT IF(Friend1=@me, Friend2, Friend1), FirstName, Surname FROM _Friend, _User WHERE (Friend1=@me OR Friend2=@me) AND IF(Friend1=@me, Friend2, Friend1)=Username;"
+        Dim friendsSql As String = "SELECT IIF(Friend1=@me, Friend2, Friend1), FirstName, Surname FROM _Friend, _User WHERE (Friend1=@me OR Friend2=@me) AND IIF(Friend1=@me, Friend2, Friend1)=Username;"
         'IF(condition, if_true, if_false)
         'IF(Friend1=@me, Friend2, Friend1) checks if Friend1 contains @me
         'If it does, Then @Me's friend username must be in the column Friend2, so output Friend2. Else output Friend1
@@ -166,7 +166,7 @@ Class DatabaseInterface
     End Function
     Public Shared Function GetFriendList(ByVal Username As String) As String()
 
-        Dim friendsSql As String = "SELECT IF(Friend1=@me, Friend2, Friend1) FROM _Friend WHERE (Friend1=@me OR Friend2=@me);"
+        Dim friendsSql As String = "SELECT IIF(Friend1=@me, Friend2, Friend1) FROM _Friend WHERE (Friend1=@me OR Friend2=@me);"
 
         Dim friendCommand As New SQLiteCommand(friendsSql, dbConnection)
 
