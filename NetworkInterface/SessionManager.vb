@@ -248,31 +248,4 @@ Public Class SessionManager
             MyBase.New("Could not find an open session for this endpoint. Unable to send data.")
         End Sub
     End Class
-
-    'Class Message
-    '    Private _message As Object
-    '    Private _source As IPEndPoint
-    '    Sub New(ByVal message As Object, ByVal source As IPEndPoint)
-    '        Me.Message = message
-    '        Me.Source = source
-    '    End Sub
-
-    '    Public Property Message As Object
-    '        Get
-    '            Return _message
-    '        End Get
-    '        Set(value As Object)
-    '            _message = value
-    '        End Set
-    '    End Property
-
-    '    Public Property Source As IPEndPoint
-    '        Get
-    '            Return _source
-    '        End Get
-    '        Set(value As IPEndPoint)
-    '            _source = value
-    '        End Set
-    '    End Property
-    'End Class
 End Class

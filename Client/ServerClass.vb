@@ -123,30 +123,6 @@ Public Class ServerConnection
         End Try
     End Function
 
-    'Public Async Function ConnectAsync() As Task(Of Boolean)
-    '    Dim nPing As New Ping
-    '    Dim nRandom As Integer = nPing.Random
-    '    Dim response As Packet
-    '    Dim pingResult As Ping
-
-    '    response = Await RequestAndResponse(nPing)
-    '    If Not IsNothing(response) Then
-    '        If response.GetType() = GetType(Ping) Then
-    '            pingResult = response
-    '            If pingResult.Random = nRandom Then
-    '                connected = True
-    '                Return True
-    '            Else
-    '                'if the data in the ping is not the same
-    '                Throw New UnknownTypeException
-    '            End If
-    '        Else
-    '            Throw New UnknownTypeException
-    '        End If
-    '    Else
-    '        Throw New NullResponseException
-    '    End If
-    'End Function
     Public Sub Disconnect()
         _session.Disconnect(ServerEndpoint)
     End Sub

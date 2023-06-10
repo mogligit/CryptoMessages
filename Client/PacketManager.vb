@@ -30,14 +30,6 @@ Module PacketManager
         End Get
     End Property
 
-    'Public Sub InitialiseNetInt()
-    '    Server.ConnectAsync()
-    'End Sub
-    'Public Sub CloseNetInt()
-    '    NetInt.EndListen()
-    '    NetInt = Nothing
-    'End Sub
-
     '
     'PROCEDURES MANAGING RECEIVED DATA
     '
@@ -137,8 +129,6 @@ Module PacketManager
         Await UploadUserData(data, backupMessages)
         Await ChangeOnlineStatus(False, data.User)
 
-
-        Server.Disconnect() 'close socket connection to server
     End Function
     Public Async Function Login(ByVal Username As String, ByVal Password As String) As Task(Of Result)
         Dim loginRequest As New LoginAttempt(Username, Password)
