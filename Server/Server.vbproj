@@ -147,6 +147,7 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="cryptomessages.db.sql" />
     <Content Include="CryptoMessagesS.ico" />
     <Content Include="dbconnection.txt" />
   </ItemGroup>

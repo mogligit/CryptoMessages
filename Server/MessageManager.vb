@@ -97,7 +97,7 @@ Module MessageManager
                             If args.Length = 2 Then
                                 DatabaseInterface.StartConnection()
                             Else
-                                DatabaseInterface.StartConnection(args(Array.IndexOf(args, "-ip") + 1), args(Array.IndexOf(args, "-u") + 1), args(Array.IndexOf(args, "-p") + 1))
+                                DatabaseInterface.StartConnection(args(Array.IndexOf(args, "-ip") + 1))
                             End If
                         Case "disconnect"
                             DatabaseInterface.StopConnection()

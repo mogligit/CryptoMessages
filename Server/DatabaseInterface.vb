@@ -6,6 +6,35 @@ Imports PacketType
 Class DatabaseInterface
     Private Shared dbConnection As SQLiteConnection
     Private Shared _IsConnected As Boolean
+    Private Const DEFAULT_DB_CONNECTION_STRING = "Data Source=cryptomessages.db"
+    Private Const DEFAULT_DB_SCHEMA = "BEGIN TRANSACTION;
+CREATE TABLE If Not EXISTS ""_Message"" (
+	""DateAndTime""	INTEGER,
+	""Sender""	TEXT,
+	""Recipient""	TEXT,
+	""Message""	TEXT,
+	PRIMARY KEY(""DateAndTime"", ""Sender"", ""Recipient""),
+    FOREIGN KEY(""Sender"") REFERENCES ""_User""(""Username""),
+	FOREIGN KEY(""Recipient"") REFERENCES ""_User""(""Username"")
+);
+CREATE TABLE If Not EXISTS ""_Friend"" (
+	""Friend1""	TEXT,
+	""Friend2""	TEXT,
+	PRIMARY KEY(""Friend1"", ""Friend2""),
+    FOREIGN KEY(""Friend2"") REFERENCES ""_User""(""Username""),
+	FOREIGN KEY(""Friend1"") REFERENCES ""_User""(""Username"")
+);
+CREATE TABLE If Not EXISTS ""_User"" (
+	""Username""	TEXT,
+	""FirstName""	TEXT,
+	""Surname""	TEXT,
+	""Passwd""	BLOB,
+	""ClientTextSize""	INTEGER,
+	""ClientColour""	TEXT,
+	PRIMARY KEY(""Username"")
+);
+COMMIT;"
+
 
     Public Shared ReadOnly Property IsConnected As Boolean
         Get
@@ -13,23 +42,32 @@ Class DatabaseInterface
         End Get
     End Property
 
-    Public Overloads Shared Function StartConnection() As Boolean
+    Public Overloads Shared Function StartConnection(Optional connectionString As String = Nothing) As Boolean
         If _IsConnected Then
             frmMain.ConsoleOutput("Connection to the database is already open.")
             Return True
         Else
-            frmMain.ConsoleOutput("Connecting to database...")
+            frmMain.ConsoleOutput("Connecting to SQLite database...")
             dbConnection = New SQLiteConnection
-            Dim credentials As String = ReadCredentialsFromFile()
-            If Not IsNothing(credentials) Then
-                dbConnection.ConnectionString = credentials
+
+            If IsNothing(connectionString) Then     'check whether user specified a connection string
+                connectionString = ReadCredentialsFromFile()
+            Else
+                connectionString = DEFAULT_DB_CONNECTION_STRING
+            End If
+
+            If Not IsNothing(connectionString) Then
+                dbConnection.ConnectionString = connectionString
                 Try
                     dbConnection.Open()
-                    frmMain.ConsoleOutput("Connection with database established successfully.")
+                    'restores default schema if it doesn't exist
+                    Dim sqlCommand As New SQLiteCommand(DEFAULT_DB_SCHEMA, dbConnection)
+                    sqlCommand.ExecuteNonQuery()
+                    frmMain.ConsoleOutput("Connection to database established successfully.")
                     _IsConnected = True
                     Return True
                 Catch ex As Exception
-                    frmMain.ConsoleOutput("Error while connecting to database. Please check credentials.")
+                    frmMain.ConsoleOutput("Error while connecting to database. Please check connection string.")
                     Return False
                 End Try
             Else
@@ -37,25 +75,42 @@ Class DatabaseInterface
             End If
         End If
     End Function
-    Public Overloads Shared Function StartConnection(ByVal IP As String, ByVal Username As String, ByVal Password As String) As Boolean
-        If _IsConnected Then
-            frmMain.ConsoleOutput("Connection to the database is already open.")
-            Return True
+
+    Public Shared Function ReadCredentialsFromFile() As String
+        Dim credentials As String
+        If File.Exists("dbconnection.txt") Then
+            Using reader As New StreamReader("dbconnection.txt")
+                credentials = reader.ReadLine()
+            End Using
+            Return credentials
         Else
-            dbConnection = New SQLiteConnection
-            Dim credentials As String = String.Format("server={0}; userid={1};password={2}; database=B9296_CryptoMessages;", IP, Username, Password)
-            dbConnection.ConnectionString = credentials
-            Try
-                dbConnection.Open()
-                frmMain.ConsoleOutput("Connection with database established successfully.")
-                _IsConnected = True
-                Return True
-            Catch ex As Exception
-                frmMain.ConsoleOutput("Error while connecting to database. Please check credentials.")
-                Return False
-            End Try
+            Return "Data Source=cryptomessages.db"
+            frmMain.ConsoleOutput("     The file dbconnection.txt could not be found. Trying default string 'Data Source=cryptomessages.db'...")
+            'frmMain.ConsoleOutput("     The file dbconnection.txt could not be found. Cannot connect to database.")
+            'frmMain.ConsoleOutput("     Please make sure it is in the same directory as the executing path of this program.")
         End If
+        Return Nothing
     End Function
+
+    'Public Overloads Shared Function StartConnection(ByVal IP As String, ByVal Username As String, ByVal Password As String) As Boolean
+    '    If _IsConnected Then
+    '        frmMain.ConsoleOutput("Connection to the database is already open.")
+    '        Return True
+    '    Else
+    '        dbConnection = New SQLiteConnection
+    '        Dim credentials As String = String.Format("server={0}; userid={1};password={2}; database=B9296_CryptoMessages;", IP, Username, Password)
+    '        dbConnection.ConnectionString = credentials
+    '        Try
+    '            dbConnection.Open()
+    '            frmMain.ConsoleOutput("Connection with database established successfully.")
+    '            _IsConnected = True
+    '            Return True
+    '        Catch ex As Exception
+    '            frmMain.ConsoleOutput("Error while connecting to database. Please check credentials.")
+    '            Return False
+    '        End Try
+    '    End If
+    'End Function
     Public Shared Function StopConnection() As Boolean
         If _IsConnected Then
             Try
@@ -245,22 +300,6 @@ Class DatabaseInterface
                 Throw New UserDoesNotExistException(Username)
             End If
         End Using
-    End Function
-
-    Public Shared Function ReadCredentialsFromFile() As String
-        Dim credentials As String
-        If File.Exists("dbconnection.txt") Then
-            Using reader As New StreamReader("dbconnection.txt")
-                credentials = reader.ReadLine()
-            End Using
-            Return credentials
-        Else
-            Return "Data Source=cryptomessages.db"
-            frmMain.ConsoleOutput("     The file dbconnection.txt could not be found. Trying default string 'Data Source=cryptomessages.db'...")
-            'frmMain.ConsoleOutput("     The file dbconnection.txt could not be found. Cannot connect to database.")
-            'frmMain.ConsoleOutput("     Please make sure it is in the same directory as the executing path of this program.")
-        End If
-        Return Nothing
     End Function
 End Class
 
