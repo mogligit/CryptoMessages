@@ -94,11 +94,11 @@ Module MessageManager
                 Case "db"
                     Select Case args(1)
                         Case "connect"
-                            If args.Length = 2 Then
-                                DatabaseInterface.StartConnection()
-                            Else
-                                DatabaseInterface.StartConnection(args(Array.IndexOf(args, "-ip") + 1))
-                            End If
+                            'If args.Length = 2 Then
+                            DatabaseInterface.StartConnection()
+                            'Else
+                            'DatabaseInterface.StartConnection(args(Array.IndexOf(args, "-s") + 1))
+                            'End If
                         Case "disconnect"
                             DatabaseInterface.StopConnection()
                     End Select

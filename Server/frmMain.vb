@@ -31,7 +31,7 @@
     Public Sub ConsoleOutput(ByVal Text As String, ParamArray arg As String())
         Text = String.Format(Text, arg)
         Dim time As Date = TimeOfDay
-        Dim timeString As String = String.Format("[{0}:{1}:{2}] > ",
+        Dim timeString As String = String.Format("[{0}:{1}:{2}] ",
                                                  TimeOfDay.Hour.ToString.PadLeft(2, "0"),
                                                  TimeOfDay.Minute.ToString.PadLeft(2, "0"),
                                                  TimeOfDay.Second.ToString.PadLeft(2, "0"))
@@ -57,11 +57,11 @@
     Public Sub DisplayHelp()
         ConsoleOutput("--------HELP--------")
         ConsoleOutput("COMMAND      OPTIONS                                                            DESCRIPTION")
-        ConsoleOutput("AUTO         [-S (security-level)]                                              Starts the server. [-S] specifies size of the cryptographic keys in bits.")
+        ConsoleOutput("AUTO         [-s (security-level)]                                              Starts the server. [-S] specifies size of the cryptographic keys in bits.")
         ConsoleOutput("CLEAR                                                                           Clears log.")
-        ConsoleOutput("DB           CONNECT [-IP ip -U username -P password]                           Database command. Enter credentials in dbconnection.txt for [db connect].")
+        ConsoleOutput("DB           CONNECT                                                            Database command. Enter credentials in dbconnection.txt for [db connect].")
         ConsoleOutput("             DISCONNECT")
-        ConsoleOutput("LISTENER     (START [-P port]) | STOP                                           Starts or stops listening for incoming packages.")
+        ConsoleOutput("LISTENER     (START [-p port]) | STOP                                           Starts or stops listening for incoming packages.")
         ConsoleOutput("STOP                                                                            Closes all connections and exits the program.")
         ConsoleOutput("HELP                                                                            Displays this menu.")
     End Sub
