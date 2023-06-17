@@ -50,7 +50,7 @@
     <OptionInfer>On</OptionInfer>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>CryptoMessagesS.ico</ApplicationIcon>
+    <ApplicationIcon>server_logo.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="EntityFramework, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
@@ -148,8 +148,8 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="cryptomessages.db.sql" />
-    <Content Include="CryptoMessagesS.ico" />
     <Content Include="dbconnection.txt" />
+    <Content Include="server_logo.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Elgamal\Elgamal.vbproj">
